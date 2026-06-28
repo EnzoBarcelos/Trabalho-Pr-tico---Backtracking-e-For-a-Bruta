@@ -1,0 +1,15 @@
+instancia,n,vazias,solver,estados,validacoes,podas,tempo_ms_media,tempo_ms_std,resolveu
+teste_4x4.txt,4,8,Backtracking,12,12,4,0.0267,0.0047,sim
+teste_4x4.txt,4,8,Forca Bruta,408,203,0,0.0725,0.0381,sim
+facil_6x6.txt,6,10,Backtracking,15,15,5,0.0257,0.0046,sim
+facil_6x6.txt,6,10,Forca Bruta,689,343,0,0.0412,0.0030,sim
+medio_6x6.txt,6,20,Backtracking,31,31,10,0.0162,0.0012,sim
+medio_6x6.txt,6,20,Forca Bruta,683347,341669,0,9.0398,1.5686,sim
+vazio_6x6.txt,6,22,Backtracking,32,32,9,0.0170,0.0014,sim
+vazio_6x6.txt,6,22,Forca Bruta,427862,213925,0,5.4661,0.1237,sim
+dificil_8x8.txt,8,35,Backtracking,254,254,118,0.0575,0.0197,sim
+dificil_8x8.txt,8,35,Forca Bruta,34359738368,0,0,NA,NA,pulado
+esparso_8x8.txt,8,45,Backtracking,298,298,138,0.0530,0.0027,sim
+esparso_8x8.txt,8,45,Forca Bruta,35184372088832,0,0,NA,NA,pulado
+enorme_10x10.txt,10,50,Backtracking,151,151,64,0.0437,0.0024,sim
+enorme_10x10.txt,10,50,Forca Bruta,1125899906842624,0,0,NA,NA,pulado

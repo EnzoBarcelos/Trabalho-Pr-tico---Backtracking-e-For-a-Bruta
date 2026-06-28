@@ -1,0 +1,14 @@
+# Instancia de Tango - 6x6 medio
+# S=Sol  L=Lua  .=vazia ; restricoes: H/V linha coluna (=/x)
+6
+.L.S..
+......
+..S.L.
+SLSSLL
+.SLL..
+.L.SL.
+V 0 1 x
+V 0 5 =
+V 1 1 =
+V 2 0 x
+V 2 4 =

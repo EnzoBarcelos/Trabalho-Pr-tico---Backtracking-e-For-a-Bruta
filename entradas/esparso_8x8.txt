@@ -1,0 +1,19 @@
+# Instancia de Tango - 8x8 esparso
+# S=Sol  L=Lua  .=vazia ; restricoes: H/V linha coluna (=/x)
+8
+...S.L..
+....L...
+.....S.L
+..LS.L..
+L......S
+..L..S..
+S...S...
+LS.LS..S
+H 2 0 x
+H 2 1 =
+H 2 2 x
+H 3 4 =
+H 5 6 x
+V 2 0 x
+V 3 5 x
+V 5 2 x

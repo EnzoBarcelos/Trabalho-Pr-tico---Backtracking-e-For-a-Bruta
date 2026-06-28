@@ -1,0 +1,352 @@
+\documentclass[12pt]{article}
+
+\usepackage{sbc-template}
+\usepackage{graphicx,url}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue!60!black}\bfseries,
+  commentstyle=\color{green!40!black}\itshape,
+  stringstyle=\color{red!60!black},
+  numbers=none,
+  breaklines=true,
+  showstringspaces=false,
+  language=Java,
+  frame=single,
+  framesep=4pt
+}
+
+\sloppy
+
+\title{Resolução do Quebra-Cabeça Tango:\\Força Bruta e Backtracking como Estudo de Poda em CSPs}
+
+\author{Enzo Barcelos\inst{1}, Arthur Sita Gomes\inst{1}, Rafael Ferraz Barra\inst{1},\\
+  Luiz Victor Aldenucci\inst{1}, Allan Mateus Arruda de Souza\inst{1}, Hugo Macedo de Carvalho\inst{1}}
+
+\address{Curso de Engenharia de Software -- Pontifícia Universidade Católica de Minas Gerais (PUC Minas)
+  \email{enzo.barcelos@sga.pucminas.br, arthur.gomes@sga.pucminas.br,}\\
+  \texttt{rafael.barra.1384417@sga.pucminas.br, 1352396@sga.pucminas.br,}\\
+  \texttt{1399944@sga.pucminas.br, hmcarvalho@sga.pucminas.br}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{resumo}
+  Este trabalho modela e resolve o quebra-cabeça lógico Tango como um Problema de Satisfação de Restrições, comparando duas técnicas de busca no espaço de estados: força bruta pura e backtracking com poda. As duas estratégias compartilham o mesmo esqueleto recursivo e a mesma lógica de validação das cinco regras do jogo; a diferença está em \emph{quando} a validação ocorre. A força bruta só verifica o tabuleiro quando ele está inteiramente preenchido, enquanto o backtracking testa cada atribuição na hora e descarta ramos inválidos antes de descer a recursão. Instrumentamos os dois algoritmos com contadores de estados explorados, inclusive por nível da recursão, e medimos o desempenho em sete instâncias, de 4$\times$4 até 10$\times$10. Os resultados deixam a diferença concreta: numa grade 6$\times$6 com vinte células vazias, a força bruta explora mais de 680 mil estados, contra apenas 31 do backtracking; num 10$\times$10 a força bruta enfrentaria $2^{50}$ estados (mais de $10^{15}$), enquanto o backtracking resolve visitando 151. O perfil por profundidade mostra a raiz da diferença: a força bruta praticamente dobra o número de estados a cada nível, enquanto o backtracking mantém pouco mais de um estado por nível ao longo de toda a árvore.
+\end{resumo}
+
+\section{Introdução}
+
+Problemas de Satisfação de Restrições (CSPs) aparecem sempre que precisamos encontrar uma configuração que respeite um conjunto de regras simultâneas. Alocação de horários, coloração de mapas e boa parte dos quebra-cabeças de lógica caem nessa categoria. O atrativo desses jogos para o estudo de algoritmos é que eles têm regras simples de enunciar, mas um espaço de soluções que cresce de forma explosiva com o tamanho do tabuleiro.
+
+O Tango é um desses jogos. Numa grade quadrada de lado par, cada célula recebe um entre dois símbolos (aqui chamados Sol e Lua), e o preenchimento precisa obedecer a cinco regras descritas na Seção~\ref{sec:modelagem}. A maneira mais direta de atacar o problema é a força bruta: gerar todas as combinações possíveis e ficar com aquela que satisfaz as regras. O número dessas combinações é $2^{N^2}$ para uma grade $N \times N$, o que já passa de $6 \times 10^{10}$ num tabuleiro 6$\times$6. Testar tudo deixa de ser uma opção rapidamente.
+
+O backtracking é o refinamento natural. Em vez de montar o tabuleiro inteiro para só então conferir, ele constrói a solução célula a célula e verifica as regras a cada passo. Quando uma atribuição já viola alguma regra, o ramo inteiro abaixo dela é abandonado sem ser explorado. Essa poda é o que separa um algoritmo que roda em milissegundos de um que não termina em tempo hábil.
+
+O objetivo deste trabalho é implementar as duas estratégias para o Tango, mantendo a lógica de validação separada da mecânica de recursão, e medir empiricamente o impacto da poda. Duas perguntas guiam a análise. A primeira: a partir de que tamanho a força bruta deixa de ser viável? A segunda: onde, exatamente, a poda economiza trabalho na árvore de busca?
+
+O restante do texto está organizado assim. A Seção~\ref{sec:modelagem} descreve como o tabuleiro, as restrições e a validação foram representados. As Seções~\ref{sec:forcabruta} e~\ref{sec:backtracking} detalham as duas estratégias e as comparam estruturalmente. A Seção~\ref{sec:exemplos} mostra execuções reais no terminal. A Seção~\ref{sec:complexidade} discute o espaço de busca e os resultados medidos, incluindo o perfil da árvore por profundidade. A Seção~\ref{sec:conclusao} fecha o trabalho.
+
+\section{Modelagem do Problema}
+\label{sec:modelagem}
+
+\subsection{As regras do Tango}
+
+O tabuleiro é uma grade $N \times N$ com $N$ par. Cada célula contém Sol ou Lua. As cinco regras são:
+
+\begin{enumerate}
+  \item \textbf{Preenchimento completo:} toda célula recebe Sol ou Lua.
+  \item \textbf{Limite de adjacência:} não pode haver três símbolos iguais consecutivos, na horizontal ou na vertical.
+  \item \textbf{Equilíbrio:} cada linha e cada coluna tem exatamente $N/2$ Sóis e $N/2$ Luas.
+  \item \textbf{Igualdade ($=$):} células ligadas pelo sinal $=$ devem conter o mesmo símbolo.
+  \item \textbf{Oposição ($\times$):} células ligadas pelo sinal $\times$ devem conter símbolos opostos.
+\end{enumerate}
+
+Um tabuleiro bem formulado tem solução única. As dicas iniciais (algumas células já preenchidas) e as restrições de igualdade e oposição são o que garante essa unicidade.
+
+\subsection{Estruturas de dados}
+
+A modelagem foi feita em Java, em torno de três tipos no pacote \texttt{modelo}. O tipo \texttt{Simbolo} é um \texttt{enum} com os valores \texttt{SOL}, \texttt{LUA} e \texttt{VAZIO}. Tratar Sol e Lua como opostos binários deixa a regra de oposição e a contagem de equilíbrio bem diretas: o método \texttt{oposto()} troca um pelo outro. O tipo \texttt{Restricao} é outro \texttt{enum}, com \texttt{NENHUMA}, \texttt{IGUAL} e \texttt{OPOSTO}.
+
+O coração da modelagem é a classe \texttt{Tabuleiro}, que reúne quatro estruturas:
+
+\begin{itemize}
+  \item \texttt{Simbolo[][] grade} guarda o símbolo atual de cada célula, podendo ser \texttt{VAZIO} durante a busca;
+  \item \texttt{boolean[][] fixa} marca quais células vieram como dica no arquivo de entrada. A busca nunca mexe numa célula fixa;
+  \item \texttt{Restricao[][] restricaoH} guarda a restrição entre $(r,c)$ e o vizinho à direita $(r,c+1)$;
+  \item \texttt{Restricao[][] restricaoV} guarda a restrição entre $(r,c)$ e o vizinho de baixo $(r+1,c)$.
+\end{itemize}
+
+As duas matrizes de restrição têm dimensões diferentes da grade, e isso não é por acaso. Como uma restrição horizontal liga uma célula à sua vizinha da direita, não existe restrição partindo da última coluna; por isso \texttt{restricaoH} tem dimensão $N \times (N-1)$. Pela mesma razão, \texttt{restricaoV} é $(N-1) \times N$. Assim, a restrição entre $(r,c)$ e $(r,c+1)$ mora exatamente em \texttt{restricaoH[r][c]}, e a que liga $(r,c)$ a $(r+1,c)$ mora em \texttt{restricaoV[r][c]}. Esse mapeamento direto evita estruturas auxiliares e torna a consulta de vizinhança uma operação de índice.
+
+Separar \texttt{grade} de \texttt{fixa} foi uma decisão deliberada. Deixa explícito o que é dado do problema e o que a busca pode preencher, e dispensa qualquer estrutura extra para lembrar das dicas durante o backtracking.
+
+\subsection{Formato de entrada}
+
+A especificação dá liberdade para o formato. Optamos por um arquivo de texto simples. A primeira linha traz $N$. As $N$ linhas seguintes descrevem a grade, com \texttt{S} para Sol, \texttt{L} para Lua e \texttt{.} para célula vazia. Depois vêm as restrições, uma por linha, no formato \texttt{H r c <sinal>} (entre $(r,c)$ e a célula à direita) ou \texttt{V r c <sinal>} (entre $(r,c)$ e a de baixo), com o sinal \texttt{=} ou \texttt{x}. A classe \texttt{LeitorTabuleiro} faz a leitura e marca como fixa toda célula que vem preenchida.
+
+\subsection{A validação como módulo}
+\label{sec:validador}
+
+A especificação pede que a lógica de validação fique separada da mecânica de recursão. Concentramos as cinco regras numa única classe, o \texttt{Validador}, que não sabe nada sobre busca: ela só responde se um estado é válido. As duas estratégias dependem dela, o que garante que ambas julgam o tabuleiro pelos mesmos critérios. São três pontos de entrada:
+
+\begin{itemize}
+  \item \texttt{tabuleiroCompletoValido(t)} confere as cinco regras de uma vez, e só faz sentido com o tabuleiro cheio. É o que a força bruta usa.
+  \item \texttt{movimentoValido(t, r, c)} verifica apenas o que a célula recém-atribuída $(r,c)$ pode ter quebrado. É o critério de poda do backtracking.
+  \item \texttt{dicasValidas(t)} aplica \texttt{movimentoValido} a todas as células já preenchidas. O backtracking a chama uma vez, antes de buscar, para garantir que as dicas iniciais não se contradizem --- caso contrário, uma violação restrita às células fixas escaparia, já que a busca só percorre as livres.
+\end{itemize}
+
+O custo de cada checagem de \texttt{movimentoValido} é baixo. A adjacência olha as janelas de três células que contêm $(r,c)$, em duas direções, o que é $O(1)$. As restrições de igualdade e oposição comparam $(r,c)$ com até quatro vizinhos, também $O(1)$. O equilíbrio parcial conta o símbolo na linha e na coluna de $(r,c)$, em $O(N)$. Assim, validar uma jogada custa $O(N)$. A validação completa, por sua vez, varre o tabuleiro inteiro e custa $O(N^2)$.
+
+\section{Estratégia de Resolução: Força Bruta}
+\label{sec:forcabruta}
+
+A força bruta corresponde à definição literal de busca exaustiva: gerar o espaço completo de estados e, ao final, verificar quais satisfazem as regras. Na implementação, listamos as células livres uma vez e preenchemos cada uma, em ordem, com Sol e depois com Lua. Nenhuma regra é consultada durante a montagem. A validação acontece só na folha da recursão, quando todas as células já receberam um símbolo.
+
+\begin{lstlisting}
+private boolean preencher(Tabuleiro t, int idx) {
+    // Caso base: tabuleiro completo. So agora a forca bruta verifica as regras.
+    if (idx == livres.length) {
+        validacoes++;
+        return validador.tabuleiroCompletoValido(t);
+    }
+    int r = livres[idx][0], c = livres[idx][1];
+    for (Simbolo s : new Simbolo[]{Simbolo.SOL, Simbolo.LUA}) {
+        t.grade[r][c] = s;
+        estados++;
+        if (preencher(t, idx + 1)) return true;
+    }
+    t.grade[r][c] = Simbolo.VAZIO;
+    return false;
+}
+\end{lstlisting}
+
+A consequência é direta. Com $K$ células vazias, a árvore de recursão tem $2^K$ folhas, e a validação completa custa $O(N^2)$ em cada uma que é alcançada. O algoritmo só não chega a gerar literalmente todas as $2^K$ combinações porque para assim que encontra a primeira solução válida. Que isso aconteça cedo ou tarde depende da ordem de enumeração e de onde a solução cai nela, não do número de células vazias. No pior caso, porém, é a árvore inteira que precisa ser percorrida.
+
+\section{Estratégia de Resolução: Backtracking}
+\label{sec:backtracking}
+
+O backtracking usa a mesma espinha dorsal: percorre as células livres em ordem e tenta Sol e depois Lua em cada uma. A diferença está em um ponto só. Logo depois de atribuir um símbolo, ele chama o validador para checar se aquela atribuição já viola alguma regra. Se viola, o ramo é descartado na hora (a poda), e o algoritmo nem tenta descer a recursão a partir dali.
+
+\begin{lstlisting}
+public boolean resolver(Tabuleiro t) {
+    resetContadores();
+    // dicas fixas tambem precisam respeitar as regras (a busca nao as visita)
+    if (!validador.dicasValidas(t)) return false;
+    livres = t.celulasLivres();
+    return preencher(t, 0);
+}
+
+private boolean preencher(Tabuleiro t, int idx) {
+    if (idx == livres.length) return true; // base: tudo preenchido e valido
+    int r = livres[idx][0], c = livres[idx][1];
+    for (Simbolo s : new Simbolo[]{Simbolo.SOL, Simbolo.LUA}) {
+        t.grade[r][c] = s;
+        estados++; validacoes++;
+        if (validador.movimentoValido(t, r, c)) {
+            if (preencher(t, idx + 1)) return true;
+        } else {
+            podas++; // ramo cortado sem recursao
+        }
+    }
+    t.grade[r][c] = Simbolo.VAZIO; // backtrack
+    return false;
+}
+\end{lstlisting}
+
+A condição de parada (caso base) é alcançada quando todas as células livres foram preenchidas. Como cada passo do caminho já passou pela validação, um caminho que chega ao fim é necessariamente uma solução --- desde que as dicas iniciais também respeitem as regras. E aqui há um cuidado: a busca só visita células livres, então \texttt{movimentoValido} nunca é chamado sobre uma célula fixa, e uma violação que estivesse inteiramente entre as dicas passaria despercebida. Por isso \texttt{resolver} chama \texttt{dicasValidas} uma única vez antes de iniciar a busca, conferindo que as dicas são consistentes; com isso, a validação incremental cobre tudo o que a busca toca e a checagem inicial cobre o resto. Não é preciso revalidar o tabuleiro inteiro ao chegar à folha, e há um motivo sutil para isso. O equilíbrio é checado como um limitante: \texttt{movimentoValido} rejeita qualquer jogada que faça um símbolo ultrapassar $N/2$ numa linha ou coluna. Ora, se em nenhum momento um símbolo passou de $N/2$ e a linha de $N$ células acabou preenchida, então sobra exatamente $N/2$ de cada um. O equilíbrio exato vem de graça no fim, desde que o limitante tenha sido respeitado o tempo todo.
+
+\subsection{Comparação estrutural com a Força Bruta}
+\label{sec:comparacao}
+
+Vale olhar as duas funções lado a lado, porque elas são quase idênticas. Mesmo laço sobre Sol e Lua, mesma recursão em \texttt{idx + 1}, mesmo desfazer no fim. A diferença que importa cabe em uma decisão: \emph{onde} entra a validação.
+
+\begin{lstlisting}
+// Forca Bruta: valida so quando idx chega ao fim (folha)
+if (idx == livres.length) return validador.tabuleiroCompletoValido(t);
+
+// Backtracking: valida a cada atribuicao e poda na hora
+if (validador.movimentoValido(t, r, c)) { ... } else { podas++; }
+\end{lstlisting}
+
+Esse deslocamento de uma linha muda o comportamento da árvore de busca por inteiro. Na força bruta, a recursão sempre desce até a folha, então cada nível tem o dobro de nós do anterior, e o número de estados cresce como $2^{\text{nível}}$. No backtracking, a validação na subida corta um ramo cedo, e cortar um ramo no nível $i$ elimina toda a subárvore de tamanho até $2^{K-i}$ que pendia dele. Quanto mais cedo a poda acontece, maior o galho que cai. A Seção~\ref{sec:perfil} mostra esse efeito medido, nível a nível.
+
+\section{Exemplos de Execução}
+\label{sec:exemplos}
+
+O programa opera no terminal. Ao escolher uma instância, ele imprime o tabuleiro inicial, com as lacunas e as restrições desenhadas entre as células, roda as duas estratégias e imprime o resultado de cada uma. A Figura~\ref{fig:exec6} mostra a resolução de uma grade 6$\times$6 com dez células vazias.
+
+\begin{figure}[!ht]
+\centering
+\begin{footnotesize}
+\begin{verbatim}
+>>> Tabuleiro INICIAL (6x6):       ----- Backtracking -----
+ S   S   L   L   . x .              S   S   L   L   S x L
+     =                                  =
+ .   S x L   S   L   L              S   S x L   S   L   L
+ L   . x .   S   .   S              L   L x S   S   L   S
+ S   L   S   L   S   L              S   L   S   L   S   L
+             x                                  x
+ L   .   L   S   L   S              L   S   L   S   L   S
+ L = .   S   .   .   S              L = L   S   L   S   S
+                                   Estados=15 Validacoes=15 Podas=5
+\end{verbatim}
+\end{footnotesize}
+\caption{Resolução de uma instância 6$\times$6. À esquerda o tabuleiro inicial com dicas e restrições; à direita a solução do backtracking, que visitou 15 estados.}
+\label{fig:exec6}
+\end{figure}
+
+Para a mesma instância, a força bruta chega exatamente à mesma solução --- afinal as duas estratégias enumeram as células na mesma ordem e param na primeira solução válida, então convergem para o mesmo tabuleiro ---, mas precisa de 689 estados em vez de 15. A Figura~\ref{fig:exec8} mostra um caso 8$\times$8, com 35 células vazias. Aqui a força bruta é pulada de propósito: seriam mais de $3 \times 10^{10}$ estados. O backtracking resolve visitando 254.
+
+\begin{figure}[!ht]
+\centering
+\begin{footnotesize}
+\begin{verbatim}
+>>> Tabuleiro INICIAL (8x8):       ----- Backtracking -----
+ S   .   S   L   .   S   .   .       S   L   S   L   L   S   S   L
+ S   .   .   .   .   .   .   .       S   S   L   S   L   S   L   L
+ .   .   .   .   .   L   L   .       L   S   S   L   S   L   L   S
+ L   L   S   L   S   .   S   S       L   L   S   L   S   L   S   S
+         x                                  x
+ S x . = .   S x .   S   .   L       S x L = L   S x L   S   S   L
+ x                                   x
+ L   .   .   L   .   .   .   S       L   S   L   L   S   S   L   S
+                     x                                  x
+ .   .   S   S   L   .   .   L       S   L   S   S   L   L   S   L
+ L   .   L   .   .   L   L   .       L   S   L   S   S   L   L   S
+                              (Forca Bruta pulada: ~2^35 estados)
+\end{verbatim}
+\end{footnotesize}
+\caption{Resolução de uma instância 8$\times$8 com 35 células vazias. A força bruta é inviável; o backtracking resolve em 254 estados.}
+\label{fig:exec8}
+\end{figure}
+
+Para fechar a faixa de tamanhos, o programa também resolve um 10$\times$10 com 50 células vazias. A força bruta enfrentaria $2^{50}$ estados, algo em torno de $10^{15}$. O backtracking devolve a solução visitando 151 estados, em frações de milissegundo.
+
+\section{Análise de Complexidade}
+\label{sec:complexidade}
+
+\subsection{O tamanho do espaço de busca}
+
+Com dois símbolos por célula, uma grade $N \times N$ admite $2^{N^2}$ preenchimentos. São cerca de $6{,}9 \times 10^{10}$ para 6$\times$6 e $1{,}8 \times 10^{19}$ para 8$\times$8. Quando parte das células já vem preenchida como dica, o que importa é o número $K$ de células livres, e o espaço cai para $2^K$.
+
+As regras do jogo recortam esse espaço bem antes de a busca terminar. A de maior efeito é o equilíbrio. Uma linha válida tem exatamente $N/2$ de cada símbolo, então o número de linhas possíveis não é $2^N$, mas $\binom{N}{N/2}$. Considerando apenas essa regra, o número de tabuleiros candidatos cai de $2^{N^2}$ para $\binom{N}{N/2}^N$. Em 6$\times$6 isso significa $20^6 \approx 6{,}4 \times 10^7$, contra $6{,}9 \times 10^{10}$ do espaço bruto, uma redução de três ordens de grandeza só com uma das cinco regras. Em 8$\times$8, $\binom{8}{4}^8 = 70^8 \approx 5{,}8 \times 10^{14}$, contra $1{,}8 \times 10^{19}$.
+
+A adjacência e as restrições de igualdade e oposição cortam ainda mais. O ponto que interessa para a comparação é \emph{quando} esse corte é aplicado. A força bruta enxerga as regras apenas no fim, depois de pagar o custo de montar o tabuleiro inteiro. O backtracking as aplica na construção, e por isso nunca chega a montar a maioria dos tabuleiros que a força bruta gera.
+
+\subsection{Resultados medidos}
+
+A Tabela~\ref{tab:estados} traz os contadores de estados para as sete instâncias. O número de estados é determinístico: depende só da instância e da ordem de preenchimento, não do relógio nem da máquina. É a métrica mais confiável para comparar as duas estratégias.
+
+\begin{table}[!ht]
+\centering
+\caption{Estados explorados por cada estratégia. Onde a força bruta é inviável, reportamos o limite teórico $2^{K}$.}
+\label{tab:estados}
+\begin{tabular}{|l|c|c|r|r|r|}
+\hline
+\textbf{Instância} & \textbf{N} & \textbf{K} & \textbf{BT estados} & \textbf{BT podas} & \textbf{FB estados} \\
+\hline
+4$\times$4 didático & 4  & 8  & 12  & 4   & 408 \\
+6$\times$6 fácil    & 6  & 10 & 15  & 5   & 689 \\
+6$\times$6 médio    & 6  & 20 & 31  & 10  & 683.347 \\
+6$\times$6 vazio    & 6  & 22 & 32  & 9   & 427.862 \\
+8$\times$8 difícil  & 8  & 35 & 254 & 118 & $\approx 2^{35} = 3{,}4\times 10^{10}$ \\
+8$\times$8 esparso  & 8  & 45 & 298 & 138 & $\approx 2^{45} = 3{,}5\times 10^{13}$ \\
+10$\times$10 grande & 10 & 50 & 151 & 64  & $\approx 2^{50} = 1{,}1\times 10^{15}$ \\
+\hline
+\end{tabular}
+\end{table}
+
+A Figura~\ref{fig:estados} põe esses números num gráfico de escala logarítmica, com o número de células vazias $K$ no eixo horizontal. A reta pontilhada marca o espaço de busca $2^K$: a força bruta acompanha esse limite enquanto é viável, enquanto o backtracking corre ordens de grandeza abaixo.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.78\textwidth]{grafico_estados.png}
+\caption{Estados explorados em função do número de células vazias $K$ (escala logarítmica). A força bruta acompanha o espaço de busca $2^K$ (pontos vazados são o limite teórico, onde ela é inviável); o backtracking cresce muito mais devagar.}
+\label{fig:estados}
+\end{figure}
+
+Dois detalhes da tabela merecem comentário, porque contrariam a intuição de que ``mais células vazias significa mais trabalho''. O 6$\times$6 vazio tem mais células livres que o médio (22 contra 20), mas a força bruta explora menos estados nele (427.862 contra 683.347): é que a primeira solução, na ordem de enumeração, aparece mais cedo nessa instância. Do lado do backtracking, o 10$\times$10 (151 estados) dá menos trabalho que o 8$\times$8 esparso (298), apesar de ser maior. O motivo é que o esforço do backtracking não depende diretamente de $K$, e sim de quão restrita é a instância: dicas e restrições bem postas forçam as podas a aparecerem cedo. Vale registrar que as três instâncias maiores e mais esparsas (vazio, esparso e grande) não foram construídas para ter solução única --- elas servem para medir o custo de busca ---, ao contrário das instâncias didáticas menores, geradas com verificação de unicidade. A Figura~\ref{fig:porinst} compara os dois lado a lado, e a Figura~\ref{fig:speedup} mostra quantas vezes a força bruta explora mais estados.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.78\textwidth]{grafico_estados_por_instancia.png}
+\caption{Estados explorados por instância. As barras hachuradas são o limite teórico $2^K$, nos casos em que a força bruta é inviável.}
+\label{fig:porinst}
+\end{figure}
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.78\textwidth]{grafico_speedup.png}
+\caption{Fator de redução: número de estados da força bruta dividido pelo do backtracking. Cresce de 34$\times$ no 4$\times$4 a mais de $10^{12}\times$ no 10$\times$10.}
+\label{fig:speedup}
+\end{figure}
+
+\subsection{Perfil da árvore de busca por profundidade}
+\label{sec:perfil}
+
+A Tabela~\ref{tab:estados} mostra o total de estados, mas não \emph{onde} o trabalho se concentra. Para enxergar isso, instrumentamos os dois algoritmos para contar quantos estados são explorados em cada nível da recursão. A Figura~\ref{fig:perfil} traz o resultado para o 6$\times$6 médio, a maior instância em que as duas estratégias terminam.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.8\textwidth]{grafico_perfil_nivel.png}
+\caption{Estados explorados em cada nível da recursão (6$\times$6, $K=20$). A força bruta dobra a cada nível; o backtracking fica tipicamente em um ou dois estados por nível.}
+\label{fig:perfil}
+\end{figure}
+
+A leitura do gráfico é o resumo de todo o trabalho. A curva da força bruta é uma reta na escala logarítmica: o número de estados praticamente dobra a cada nível, chegando a mais de 340 mil no último. É o crescimento $2^{\text{nível}}$ esperado de uma árvore binária percorrida sem poda. A curva do backtracking, em contraste, fica colada à base, tipicamente em um ou dois estados por nível, com um pico isolado de três logo no início. A poda mantém a busca quase como um único caminho descendo até a solução. Aquela diferença de uma linha entre as duas funções, discutida na Seção~\ref{sec:comparacao}, é exatamente o que separa as duas curvas.
+
+\subsection{Tempo de execução}
+
+A Tabela~\ref{tab:tempo} mostra os tempos, medidos após uma execução de aquecimento e tirando a média de cinco repetições, com o desvio padrão amostral. Nas instâncias menores os tempos são tão baixos que ficam dominados por ruído de medição, e por isso a leitura honesta vem dos estados, não do relógio. O 6$\times$6 médio é o que dá o sinal mais claro: a força bruta leva cerca de 9~ms, contra centésimos de milissegundo do backtracking.
+
+\begin{table}[!ht]
+\centering
+\caption{Tempo de execução em milissegundos (média $\pm$ desvio padrão amostral sobre cinco repetições, após aquecimento).}
+\label{tab:tempo}
+\begin{tabular}{|l|c|r|r|}
+\hline
+\textbf{Instância} & \textbf{K} & \textbf{Backtracking (ms)} & \textbf{Força Bruta (ms)} \\
+\hline
+4$\times$4 didático & 8  & 0,027 $\pm$ 0,005 & 0,073 $\pm$ 0,038 \\
+6$\times$6 fácil    & 10 & 0,026 $\pm$ 0,005 & 0,041 $\pm$ 0,003 \\
+6$\times$6 médio    & 20 & 0,016 $\pm$ 0,001 & 9,040 $\pm$ 1,569 \\
+6$\times$6 vazio    & 22 & 0,017 $\pm$ 0,001 & 5,466 $\pm$ 0,124 \\
+8$\times$8 difícil  & 35 & 0,058 $\pm$ 0,020 & (inviável) \\
+8$\times$8 esparso  & 45 & 0,053 $\pm$ 0,003 & (inviável) \\
+10$\times$10 grande & 50 & 0,044 $\pm$ 0,002 & (inviável) \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.78\textwidth]{grafico_tempo.png}
+\caption{Tempo de execução em função de $K$ (escala logarítmica, barras de erro do desvio padrão amostral). Nas instâncias pequenas os tempos se confundem com o ruído de medição; a separação só fica nítida a partir do 6$\times$6 médio.}
+\label{fig:tempo}
+\end{figure}
+
+A Figura~\ref{fig:tempo} traz os mesmos tempos em escala logarítmica. Confirma a ressalva: nas instâncias pequenas as barras de erro engolem a diferença, e só a partir do 6$\times$6 médio o tempo passa a contar a mesma história que os estados.
+
+\subsection{Complexidade assintótica}
+
+No pior caso, as duas estratégias são exponenciais: nada impede uma instância patológica de forçar o backtracking a explorar quase toda a árvore. A força bruta faz $O(2^K)$ construções --- $\Theta(2^K)$ quando a solução está no fim da enumeração ou não existe --- somadas a $O(N^2)$ por validação na folha. O backtracking tem o mesmo limite superior assintótico, com uma diferença que muda tudo na prática: cada poda no nível $i$ elimina uma subárvore de tamanho até $2^{K-i}$. Em tabuleiros bem formulados, as violações aparecem cedo e em quantidade, e o número de estados efetivamente visitados fica muito abaixo do pior caso. É essa distância entre o pior caso teórico e o comportamento típico que os números das tabelas e o perfil por profundidade evidenciam.
+
+\section{Conclusão}
+\label{sec:conclusao}
+
+A primeira pergunta da introdução era a partir de que tamanho a força bruta deixa de servir. Os experimentos respondem de forma concreta. Já num 6$\times$6 com vinte células vazias a força bruta precisa de centenas de milhares de estados, e a partir do 8$\times$8 ela passa de $10^{10}$, o que a torna inútil na prática. O backtracking resolve as mesmas instâncias, e ainda um 10$\times$10, visitando de algumas dezenas a poucas centenas de estados.
+
+A segunda pergunta era onde a poda economiza. O perfil por profundidade mostrou com clareza: a força bruta dobra o trabalho a cada nível, enquanto o backtracking mantém pouco mais de um estado por nível, porque corta os ramos inválidos antes de descer. A poda não muda a classe de complexidade no pior caso, mas é a diferença entre um algoritmo que termina instantaneamente e um que não termina.
+
+O ganho vem inteiro de uma decisão de projeto: validar durante a construção, não no fim. Manter as cinco regras isoladas num \texttt{Validador} deixou as duas estratégias usarem exatamente a mesma lógica, com a força bruta chamando a versão completa e o backtracking a versão incremental. Isso tornou a comparação justa e o código fácil de conferir. Como continuação, duas direções aparecem naturais: escolher a próxima célula pela heurística do mais restrito primeiro (MRV), para antecipar as podas, e propagar restrições deduzindo valores forçados antes de tentar, aproximando o resolvedor da forma como uma pessoa joga Tango.
+
+\end{document}

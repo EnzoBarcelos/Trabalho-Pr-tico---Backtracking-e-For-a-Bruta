@@ -1,0 +1,13 @@
+# Instancia de Tango - 6x6 mais vazio
+# S=Sol  L=Lua  .=vazia ; restricoes: H/V linha coluna (=/x)
+6
+.SL.LL
+.LS.L.
+...LS.
+..L...
+.L....
+L..LS.
+H 0 2 x
+H 4 0 =
+H 4 4 =
+V 1 5 x

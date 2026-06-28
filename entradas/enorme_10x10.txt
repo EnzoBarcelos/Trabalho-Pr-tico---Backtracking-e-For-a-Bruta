@@ -1,0 +1,25 @@
+# Instancia de Tango - 10x10 grande
+# S=Sol  L=Lua  .=vazia ; restricoes: H/V linha coluna (=/x)
+10
+S.LLS.SSL.
+L.SLS..LS.
+......SL..
+.S.SL.LS..
+S.S.SL..SL
+L...SL....
+.....SLSL.
+.L.SL...SL
+.LSL.L...S
+.S.S.SLSLS
+H 0 7 x
+H 1 4 =
+H 2 3 x
+H 2 5 x
+H 3 0 x
+H 5 7 x
+H 6 0 =
+H 6 6 x
+V 1 7 =
+V 2 1 x
+V 4 1 =
+V 7 3 x

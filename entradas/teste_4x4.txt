@@ -1,0 +1,9 @@
+# Instancia de Tango - 4x4 didatico
+# S=Sol  L=Lua  .=vazia ; restricoes: H/V linha coluna (=/x)
+4
+S.SL
+..LS
+...L
+LS..
+H 1 1 x
+V 0 0 x

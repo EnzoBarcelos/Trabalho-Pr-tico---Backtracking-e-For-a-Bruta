@@ -1,0 +1,28 @@
+# Artefatos de compilacao Java
+out/
+*.class
+
+# Projeto de exemplo (referencia; repositorio git separado, nao faz parte da entrega)
+Trabalho-Pr-tico---An-lise-de-Complexidade-FPAA-master/
+
+# Texto extraido do PDF (gerado automaticamente)
+TP2-FPAA.txt
+
+# Artefatos de compilacao LaTeX (caso compile localmente)
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.bbl
+*.blg
+
+# Cache do Python
+__pycache__/
+*.pyc
+
+# Arquivos de sistema
+Thumbs.db
+.DS_Store
